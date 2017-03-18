@@ -19,8 +19,11 @@
 #include <asm/io.h>
 #include <asm/errno.h>
 
-#include "typedef.h"
-#include "cpu.h"
+#include <asm/rk-common/typedef.h>
+#include <asm/rk-common/cpu.h>
+#include <asm/rk-common/uart.h>
+#include <asm/rk-common/usbhost.h>
+
 #include "io.h"
 #include "pmu.h"
 #include "grf.h"
@@ -30,8 +33,10 @@
 #include "iomux.h"
 
 #include "clock.h"
-#include "uart.h"
-#include "pm.h"
+
+#ifdef CONFIG_PM_SUBSYSTEM
+#include <asm/rk-common/pm.h>
+#endif
 
 #ifdef CONFIG_RK_PL330_DMAC
 #include "pl330.h"
@@ -135,7 +140,11 @@ typedef enum SPI_ch {
 
 	/* pwm */
 	#define RKIO_PWM_BASE		RKIO_RK_PWM_PHYS
-	#define RKIRQ_PWM_REMOTE	IRQ_RK_PWM
+
+	/* pwm remote */
+	#define RK_PWM_REMOTE_ID	0
+	#define RK_PWM_REMOTE_IOBASE	(RKIO_RK_PWM_PHYS + 0x10 * RK_PWM_REMOTE_ID)
+	#define RK_PWM_REMOTE_IRQ	IRQ_RK_PWM
 
 	/* saradc */
 	#define RKIO_SARADC_BASE	RKIO_SARADC_PHYS
@@ -157,6 +166,8 @@ typedef enum SPI_ch {
 	/* crypto */
 	#define RKIO_CRYPTO_BASE	RKIO_CRYPTO_PHYS
 
+	/* boot information for kernel */
+	#define RKIO_BOOTINFO_BASE	(RKIO_NANDC_BASE + 0x1000)
 #elif defined(CONFIG_RKCHIP_RK3036)
 	/* Loader Flag regiseter */
 	#define RKIO_LOADER_FLAG_REG	(RKIO_GRF_PHYS + GRF_OS_REG4)
@@ -203,7 +214,11 @@ typedef enum SPI_ch {
 
 	/* pwm */
 	#define RKIO_PWM_BASE		RKIO_PWM_PHYS
-	#define RKIRQ_PWM_REMOTE	IRQ_PWM
+
+	/* pwm remote */
+	#define RK_PWM_REMOTE_ID	3
+	#define RK_PWM_REMOTE_IOBASE	(RKIO_PWM_BASE + 0x10 * RK_PWM_REMOTE_ID)
+	#define RK_PWM_REMOTE_IRQ	IRQ_PWM
 
 	/* saradc */
 	#define RKIO_SARADC_BASE	0
@@ -221,6 +236,8 @@ typedef enum SPI_ch {
 	/* efuse */
 	#define RKIO_FTEFUSE_BASE	RKIO_EFUSE_PHYS
 
+	/* boot information for kernel */
+	#define RKIO_BOOTINFO_BASE	(RKIO_NANDC_BASE + 0x1000)
 #elif defined(CONFIG_RKCHIP_RK3126) || defined(CONFIG_RKCHIP_RK3128)
 	/* Loader Flag regiseter */
 	#define RKIO_LOADER_FLAG_REG	(RKIO_PMU_PHYS + PMU_SYS_REG0)
@@ -267,7 +284,11 @@ typedef enum SPI_ch {
 
 	/* pwm */
 	#define RKIO_PWM_BASE		RKIO_PWM_PHYS
-	#define RKIRQ_PWM_REMOTE	IRQ_PWM
+
+	/* pwm remote */
+	#define RK_PWM_REMOTE_ID	3
+	#define RK_PWM_REMOTE_IOBASE	(RKIO_PWM_BASE + 0x10 * RK_PWM_REMOTE_ID)
+	#define RK_PWM_REMOTE_IRQ	IRQ_PWM
 
 	/* saradc */
 	#define RKIO_SARADC_BASE	RKIO_SARADC_PHYS
@@ -288,6 +309,9 @@ typedef enum SPI_ch {
 
 	/* crypto */
 	#define RKIO_CRYPTO_BASE	RKIO_CRYPTO_PHYS
+
+	/* boot information for kernel */
+	#define RKIO_BOOTINFO_BASE	(RKIO_NANDC_BASE + 0x1000)
 #elif  defined(CONFIG_RKCHIP_RK322X)
 	/* Loader Flag regiseter */
 	#define RKIO_LOADER_FLAG_REG	(RKIO_GRF_PHYS + GRF_OS_REG0)
@@ -334,7 +358,11 @@ typedef enum SPI_ch {
 
 	/* pwm */
 	#define RKIO_PWM_BASE		RKIO_PWM_PHYS
-	#define RKIRQ_PWM_REMOTE	IRQ_PWM
+
+	/* pwm remote */
+	#define RK_PWM_REMOTE_ID	3
+	#define RK_PWM_REMOTE_IOBASE	(RKIO_PWM_BASE + 0x10 * RK_PWM_REMOTE_ID)
+	#define RK_PWM_REMOTE_IRQ	IRQ_PWM
 
 	/* saradc */
 	#define RKIO_SARADC_BASE	0
@@ -355,6 +383,9 @@ typedef enum SPI_ch {
 
 	/* crypto */
 	#define RKIO_CRYPTO_BASE	RKIO_CRYPTO_PHYS
+
+	/* boot information for kernel */
+	#define RKIO_BOOTINFO_BASE	(RKIO_NANDC_BASE + 0x1000)
 #else
 	#error "PLS config chiptype for hardware!"
 #endif

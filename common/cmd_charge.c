@@ -59,7 +59,9 @@
 extern int rkkey_power_state(void);
 extern int is_charging(void);
 extern int pmic_charger_setting(int current);
-extern void rk_backlight_ctrl(int brightness);
+#ifdef CONFIG_RK_PWM_BL
+extern int rk_pwm_bl_config(int brightness);
+#endif
 extern void lcd_standby(int enable);
 extern uint32 rk_timer1_get_curr_count(void);
 extern int rk818_regulator_enable(int num_regulator);
@@ -76,12 +78,6 @@ u8 g_increment = 0;
 
 int timer_interrupt_wakeup = 0;
 
-//return duration(ms).
-static inline unsigned int get_fix_duration(unsigned int base) {
-	unsigned int max = 0xFFFFFFFF / 24000;
-	unsigned int now = get_timer(0);
-	return base > now? base - now : max + (base - now) + 1;
-}
 
 /***************board spec ops, maybe move these out of here.***************/
 //define this when we dont have a worked battery.
@@ -147,7 +143,7 @@ int power_key_pressed(void) {
 		if (power_pressed) {
 			//still pressing
 #define LONG_PRESSED_TIME 2000 //2s
-			if (get_fix_duration(power_pressed_time) >= LONG_PRESSED_TIME) {
+			if (get_timer(power_pressed_time) >= LONG_PRESSED_TIME) {
 				//long pressed.
 				power_pressed_state = KEY_LONG_PRESSED;
 			}
@@ -173,9 +169,14 @@ void do_set_brightness(int brightness, int old_brightness) {
 			lcd_standby(0);
 			mdelay(100);
 		}
-		rk_backlight_ctrl(brightness == SCREEN_BRIGHT ? -1 : CONFIG_BRIGHTNESS_DIM);
+
+#ifdef CONFIG_RK_PWM_BL
+		rk_pwm_bl_config(brightness == SCREEN_BRIGHT ? -1 : CONFIG_BRIGHTNESS_DIM);
+#endif
 	} else {
-		rk_backlight_ctrl(0);
+#ifdef CONFIG_RK_PWM_BL
+		rk_pwm_bl_config(0);
+#endif
 		if (IS_BRIGHT(old_brightness)) {
 			lcd_standby(1);
 		}
@@ -653,8 +654,8 @@ int do_charge(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	unsigned int charge_start_time = 0;
 	unsigned int charge_last_time = 0;
 	charge_start_time = get_timer(0);
-	debug("do_charge!!!!\n");
 	#endif
+	printf("do_charge!!!!\n");
 
 #ifdef CONFIG_CHARGE_DEEP_SLEEP
 #ifdef CONFIG_CHARGE_TIMER_WAKEUP
@@ -695,7 +696,7 @@ int do_charge(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		#endif
 		//step 2: handle timeouts.
 		if (IS_BRIGHT(g_state.brightness)) {
-			unsigned int idle_time = get_fix_duration(g_state.screen_on_time);
+			unsigned int idle_time = get_timer(g_state.screen_on_time);
 			//printf("idle_time:%ld\n", idle_time);
 			if (idle_time > SCREEN_OFF_TIMEOUT) {
 				LOGD("screen off");
@@ -746,9 +747,11 @@ int do_charge(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 			//timer enable
 			timer1_irq_init(rk_timer1_isr);
 #endif
+#ifdef CONFIG_PM_SUBSYSTEM
 			rk_pm_wakeup_gpio_init();
 			rk_pm_enter(NULL);
 			rk_pm_wakeup_gpio_deinit();
+#endif
 #ifdef CONFIG_CHARGE_TIMER_WAKEUP
 			timer1_irq_deinit();
 #endif
@@ -765,7 +768,7 @@ int do_charge(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		//step 5:step anim when screen is on.
 		if (IS_BRIGHT(brightness)) {
 			//do anim when screen is on.
-			unsigned int duration = get_fix_duration(anim_time) * 1000;
+			unsigned int duration = get_timer(anim_time) * 1000;
 			if (!IS_BRIGHT(g_state.brightness)
 					|| duration >= get_delay(&g_state)) {
 				anim_time = get_timer(0);

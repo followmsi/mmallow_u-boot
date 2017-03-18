@@ -64,6 +64,9 @@
 #include <common.h>
 #include <command.h>
 #include <part.h>
+#ifdef CONFIG_RK_DWC3_UDC
+#include <usb/dwc3_rk_udc.h>
+#endif
 
 /* This is the interface file between the common cmd_fastboot.c and
    the board specific support.
@@ -221,6 +224,14 @@ struct cmd_fastboot_interface {
 	int flag_sparse;
 	sparse_header_t sparse_header;
 	int sparse_cur_chunk;
+#if defined(CONFIG_RK_DWC3_UDC)
+	u8 tx_buffer[512];
+	u8 rx_buffer[512];
+	uint8_t rxbuf_num;
+	uint8_t txbuf_num;
+	struct dwc3_giveback_data rx_giveback;
+	struct dwc3_giveback_data tx_giveback;
+#endif
 };
 
 /* Status values */
@@ -236,6 +247,7 @@ enum fbt_reboot_type {
 	FASTBOOT_REBOOT_BOOTLOADER,		/* rockusb */
 	FASTBOOT_REBOOT_RECOVERY,		/* recovery */
 	FASTBOOT_REBOOT_RECOVERY_WIPE_DATA,	/* recovery and wipe data */
+	FASTBOOT_REBOOT_NORECOVER,		/* do not enter recover */
 	FASTBOOT_REBOOT_FASTBOOT,		/* android fastboot */
 	FASTBOOT_REBOOT_CHARGE,			/* charge */
 	FASTBOOT_REBOOT_RAMFS,

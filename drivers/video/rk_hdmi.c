@@ -199,6 +199,7 @@ static int hdmi_feature_filter(struct hdmi_dev *hdmi_dev,
 static int hdmi_parse_dts(struct hdmi_dev *hdmi_dev)
 {
 	int node, val;
+	struct fdt_gpio_state pull_up;
 
 	hdmi_dev->defaultmode = 0;
 	if (gd->fdt_blob) {
@@ -208,7 +209,7 @@ static int hdmi_parse_dts(struct hdmi_dev *hdmi_dev)
 			printf("can't find dts node for hdmi\n");
 			return -EPERM;
 		}
-	
+
 		if (!fdt_device_is_available(gd->fdt_blob, node)) {
 			printf("hdmi is disabled\n");
 			return -EPERM;
@@ -236,6 +237,19 @@ static int hdmi_parse_dts(struct hdmi_dev *hdmi_dev)
 						   (u32 *)hdmi_dev->phy_table,
 						   val / sizeof(u32));
 		}
+
+		hdmi_dev->io_pullup = -1;
+		if (hdmi_dev->soctype == HDMI_SOC_RK322X) {
+			if (fdtdec_decode_gpio(gd->fdt_blob, node,
+			    "rockchip,pullup", &pull_up) == 0) {
+				gpio_direction_output(pull_up.gpio,
+						      !pull_up.flags);
+				hdmi_dev->io_pullup = pull_up.gpio;
+			} else {
+				printf("HDMI: no pull up gpio\n");
+			}
+		}
+
 	}
 //	printf("%s default mode is %d\n", __func__, hdmi_dev->defaultmode);
 //	printf("%s:phy_pre_emphasis=0x%x\n",__func__,hdmi_dev->phy_pre_emphasis);
@@ -1551,11 +1565,11 @@ void hdmi_find_best_mode(struct hdmi_dev *hdmi_dev)
 			else if (hdmi_dev->video.color_output == HDMI_COLOR_YCBCR420)
 				hdmi_dev->video.color_input = HDMI_COLOR_YCBCR420;
 		}
-		if ((hdmi_dev->feature & SUPPORT_DEEP_10BIT) &&
+		/*if ((hdmi_dev->feature & SUPPORT_DEEP_10BIT) &&
 		    (deepcolor & HDMI_DEEP_COLOR_30BITS))
 			hdmi_dev->video.color_output_depth = 10;
-		else
-			hdmi_dev->video.color_output_depth = 8;
+		else*/
+		hdmi_dev->video.color_output_depth = 8;
 	}
 }
 

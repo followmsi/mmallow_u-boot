@@ -18,6 +18,9 @@ DECLARE_GLOBAL_DATA_PTR;
 #ifdef CONFIG_LCD
 extern int g_logo_on_state;
 #endif
+#ifdef CONFIG_UBOOT_CHARGE
+extern int android_charge_mode;
+#endif
 
 #if defined(CONFIG_RK_HDMI)
 extern int g_hdmi_vic;
@@ -39,7 +42,6 @@ extern int do_bootm_linux(int flag, int argc, char *argv[],
 #if defined(CONFIG_POWER_RK818)
 extern bool is_rk81x_fg_init(void);
 #endif
-
 extern int rkimage_load_image(rk_boot_img_hdr *hdr,
 		const disk_partition_t *boot_ptn, const disk_partition_t *kernel_ptn);
 
@@ -381,6 +383,7 @@ static int rk_load_kernel_logo(void)
 	}
 
 	g_rk_fb_size = CONFIG_RK_FB_SIZE;
+	gd->fb_offset = g_rk_fb_size;
 
 	return offset;
 }
@@ -515,6 +518,11 @@ int do_bootrk(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 			boot_source = argv[1];
 		}
 	}
+
+#ifdef CONFIG_UBOOT_CHARGE
+	if (android_charge_mode)
+		charge = true;
+#endif
 
 	memset(&images, 0, sizeof(images));
 	if (rk_bootrk_start(&images)) { /*it returns 1 when failed.*/

@@ -1,5 +1,5 @@
 /*
- * (C) Copyright 2008-2016 Fuzhou Rockchip Electronics Co., Ltd
+ * (C) Copyright 2008 Fuzhou Rockchip Electronics Co., Ltd
  * Peter, Software Engineering, <superpeter.cai@gmail.com>.
  *
  * SPDX-License-Identifier:	GPL-2.0+
@@ -8,7 +8,7 @@
 #ifndef _RKXX_CLOCK_H
 #define _RKXX_CLOCK_H
 
-#include <asm/arch/typedef.h>
+#include <asm/rk-common/typedef.h>
 
 
 /* config cpu and general clock in MHZ */
@@ -57,6 +57,12 @@ void rkclk_dump_pll(void);
  * freq:	nandc max freq request.
  */
 int rkclk_set_nandc_freq_from_gpll(uint32 nandc_id, uint32 freq);
+
+
+/*
+ * rkplat get sdhci mmc clock
+ */
+uint32 rkclk_get_sdhci_emmc_clk(void);
 
 
 /*
@@ -133,6 +139,14 @@ unsigned int rkclk_get_spi_clk(uint32 spi_bus);
  * return dclk rate
  */
 int rkclk_lcdc_clk_set(uint32 lcdc_id, uint32 dclk_hz);
+
+
+/*
+ * rkclk_lcdc_dclk_pll_sel
+ * lcdc_id (lcdc id select) : 0 - lcdc0, 1 - lcdc1
+ * pll_sel (lcdc dclk source pll select) : 0 - vpll, 1 - cpll, 2 - gpll
+ */
+int rkclk_lcdc_dclk_pll_sel(uint32 lcdc_id, uint32 pll_sel);
 
 
 #ifdef CONFIG_SECUREBOOT_CRYPTO

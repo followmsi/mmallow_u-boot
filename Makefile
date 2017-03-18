@@ -899,12 +899,24 @@ ifdef CONFIG_RKCHIP_RK3128
 RKCHIP ?= RK3128
 endif
 
-ifdef CONFIG_RKCHIP_RK3368
-RKCHIP ?= RK3368
-endif
-
 ifdef CONFIG_RKCHIP_RK322X
 RKCHIP ?= RK322X
+endif
+
+ifdef CONFIG_RKCHIP_RK3368
+ifdef CONFIG_RKCHIP_PX5
+RKCHIP ?= PX5
+else
+RKCHIP ?= RK3368
+endif
+endif
+
+ifdef CONFIG_RKCHIP_RK3366
+RKCHIP ?= RK3366
+endif
+
+ifdef CONFIG_RKCHIP_RK3399
+RKCHIP ?= RK3399
 endif
 
 RKCHIP ?= `sed -n "/CHIP=/s/CHIP=//p" RKBOOT.ini|tr -d '\r'`
@@ -914,7 +926,11 @@ UBOOTVERSION := $(UBOOTVERSION)$(if $(RKCHIP),-$(RKCHIP))$(if $(RK_UBOOT_VERSION
 RK_SUBFIX = $(if $(RK_UBOOT_VERSION),.$(RK_UBOOT_VERSION)).bin
 
 ifdef CONFIG_MERGER_TRUSTOS
+ifdef CONFIG_RK_TOS_WITH_TA
+RK_TOS_BIN ?= `sed -n "/TOSTA=/s/TOSTA=//p" ./tools/rk_tools/RKTRUST/$(RKCHIP)TOS.ini|tr -d '\r'`
+else
 RK_TOS_BIN ?= `sed -n "/TOS=/s/TOS=//p" ./tools/rk_tools/RKTRUST/$(RKCHIP)TOS.ini|tr -d '\r'`
+endif
 endif
 
 RKLoader_uboot.bin: u-boot.bin

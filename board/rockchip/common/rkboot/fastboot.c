@@ -11,29 +11,28 @@
 #include <version.h>
 #include <asm/io.h>
 
+#include <lcd.h>
 #include <power/pmic.h>
 #include <power/battery.h>
+#include <linux/input.h>
 #include <asm/arch/rkplat.h>
 #include "../config.h"
-#include <linux/input.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
 #ifdef CONFIG_CMD_FASTBOOT
 extern void fbt_fastboot_init(void);
 #endif
-
+#ifdef CONFIG_CMD_ROCKUSB
 extern uint32 GetVbus(void);
-extern void rkloader_change_cmd_for_recovery(PBootInfo boot_info , char * rec_cmd );
-extern int checkKey(uint32* boot_rockusb, uint32* boot_recovery, uint32* boot_fastboot);
+#endif
+#ifdef CONFIG_RK_PWM_BL
+extern int rk_pwm_bl_config(int brightness);
+#endif
 #ifdef CONFIG_LCD
-extern void rk_backlight_ctrl(int brightness);
-extern int lcd_enable_logo(bool enable);
 extern int drv_lcd_init(void);
 extern void lcd_standby(int enable);
 #endif
-extern int is_charging(void);
-extern void powerOn(void);
 
 #if defined(CONFIG_RK_PWM_REMOTE)
 extern int g_ir_keycode;
@@ -43,6 +42,13 @@ extern int g_ir_keycode;
 int g_logo_on_state = 0;
 #endif
 
+#ifdef CONFIG_UBOOT_CHARGE
+int android_charge_mode = 0;
+#endif
+
+
+
+#ifdef CONFIG_UBOOT_CHARGE
 /**
  * return 1 if is charging.
  */
@@ -54,10 +60,12 @@ int board_fbt_is_charging(void)
 	return 0;
 #endif
 }
+#endif
 
 void board_fbt_set_reboot_type(enum fbt_reboot_type frt)
 {
 	int boot = BOOT_NORMAL;
+
 	switch(frt) {
 		case FASTBOOT_REBOOT_BOOTLOADER:
 			boot = BOOT_LOADER;
@@ -71,13 +79,16 @@ void board_fbt_set_reboot_type(enum fbt_reboot_type frt)
 		case FASTBOOT_REBOOT_RECOVERY_WIPE_DATA:
 			boot = BOOT_WIPEDATA;
 			break;
+		case FASTBOOT_REBOOT_NORECOVER:
+			boot = BOOT_NORECOVER;
+			break;
 		default:
-			printf("unknown reboot type %d\n", frt);
-			frt = BOOT_NORMAL;
+			if (frt != FASTBOOT_REBOOT_NORMAL)
+				printf("unknown reboot type %d\n", frt);
 			break;
 	}
 
-	ISetLoaderFlag(SYS_LOADER_REBOOT_FLAG|boot);
+	ISetLoaderFlag(SYS_LOADER_REBOOT_FLAG | boot);
 }
 
 enum fbt_reboot_type board_fbt_get_reboot_type(void)
@@ -87,49 +98,59 @@ enum fbt_reboot_type board_fbt_get_reboot_type(void)
 	uint32_t loader_flag = IReadLoaderFlag();
 	int reboot_mode = loader_flag ? (loader_flag & 0xFF) : BOOT_NORMAL;
 
-	//set to non-0.
+	/* Feedback reboot mode to the kernel. */
 	ISetLoaderFlag(SYS_KERNRL_REBOOT_FLAG | reboot_mode);
 
-	if(SYS_LOADER_ERR_FLAG == loader_flag)
-	{
+
+	if (SYS_LOADER_ERR_FLAG == loader_flag) {
 		loader_flag = SYS_LOADER_REBOOT_FLAG | BOOT_LOADER;
 		reboot_mode = BOOT_LOADER;
 	}
-	if((loader_flag&0xFFFFFF00) == SYS_LOADER_REBOOT_FLAG)
-	{
-		switch(reboot_mode) {
-			case BOOT_NORMAL:
-				frt = FASTBOOT_REBOOT_NORMAL;
-				break;
-			case BOOT_LOADER:
-#ifdef CONFIG_CMD_ROCKUSB
-				printf("reboot to rockusb.\n");
-				do_rockusb(NULL, 0, 0, NULL);
-#endif
-				break;
-#ifdef CONFIG_CMD_FASTBOOT
-			case BOOT_FASTBOOT:
-				frt = FASTBOOT_REBOOT_FASTBOOT;
-				break;
-#endif
-			case BOOT_RECOVER:
-				frt = FASTBOOT_REBOOT_RECOVERY;
-				break;
-			case BOOT_WIPEDATA:
-			case BOOT_WIPEALL:
-				frt = FASTBOOT_REBOOT_RECOVERY_WIPE_DATA;
-				break;
-			case BOOT_CHARGING:
-				frt = FASTBOOT_REBOOT_CHARGE;
-				break;
-			case BOOT_RAMFS:
-				frt = FASTBOOT_REBOOT_RAMFS;
-				break;
 
-			default:
-				printf("unsupport rk boot type %d\n", reboot_mode);
-				break;
+	if ((loader_flag & 0xFFFFFF00) == SYS_LOADER_REBOOT_FLAG) {
+		switch (reboot_mode) {
+		case BOOT_NORMAL:
+			printf("reboot normal.\n");
+			frt = FASTBOOT_REBOOT_NORMAL;
+			break;
+		case BOOT_LOADER:
+#ifdef CONFIG_CMD_ROCKUSB
+			printf("reboot rockusb.\n");
+			do_rockusb(NULL, 0, 0, NULL);
+#endif
+			break;
+#ifdef CONFIG_CMD_FASTBOOT
+		case BOOT_FASTBOOT:
+			printf("reboot fastboot.\n");
+			frt = FASTBOOT_REBOOT_FASTBOOT;
+			break;
+#endif
+		case BOOT_NORECOVER:
+			printf("reboot no recover.\n");
+			frt = FASTBOOT_REBOOT_NORECOVER;
+			break;
+		case BOOT_RECOVER:
+			printf("reboot recover.\n");
+			frt = FASTBOOT_REBOOT_RECOVERY;
+			break;
+		case BOOT_WIPEDATA:
+		case BOOT_WIPEALL:
+			printf("reboot wipe data.\n");
+			frt = FASTBOOT_REBOOT_RECOVERY_WIPE_DATA;
+			break;
+		case BOOT_CHARGING:
+			printf("reboot charge.\n");
+			frt = FASTBOOT_REBOOT_CHARGE;
+			break;
+		case BOOT_RAMFS:
+			frt = FASTBOOT_REBOOT_RAMFS;
+			break;
+		default:
+			printf("unsupport reboot type %d\n", reboot_mode);
+			break;
 		}
+	} else {
+		printf("normal boot.\n");
 	}
 
 	/* Normal boot mode */
@@ -155,8 +176,12 @@ int board_fbt_key_pressed(void)
 {
 	uint32 boot_rockusb = 0, boot_recovery = 0, boot_fastboot = 0;
 	enum fbt_reboot_type frt = FASTBOOT_REBOOT_UNKNOWN;
-	int vbus = GetVbus();
+	int vbus = 0;
 	int ir_keycode = 0;
+
+#ifdef CONFIG_CMD_ROCKUSB
+	vbus = GetVbus();
+#endif
 
 #ifdef CONFIG_RK_KEY
 	checkKey((uint32 *)&boot_rockusb, (uint32 *)&boot_recovery, (uint32 *)&boot_fastboot);
@@ -166,13 +191,14 @@ int board_fbt_key_pressed(void)
 	ir_keycode = g_ir_keycode;
 #endif
 	printf("vbus = %d\n", vbus);
-	if((boot_recovery && (vbus==0)) || (ir_keycode  == KEY_POWER)) {
+	if ((boot_recovery && (vbus == 0)) || (ir_keycode == KEY_POWER)) {
 		printf("recovery key pressed.\n");
 		frt = FASTBOOT_REBOOT_RECOVERY;
-	} else if ((boot_rockusb && (vbus!=0)) || (ir_keycode  == KEY_HOME)) {
+	} else if ((boot_rockusb && (vbus != 0)) || (ir_keycode == KEY_HOME)) {
 		printf("rockusb key pressed.\n");
 #if defined(CONFIG_RK_PWM_REMOTE)
-		RemotectlDeInit();//close remote intterrupt  after rockusb key pressed
+		/* close remote intterrupt after rockusb key pressed */
+		RemotectlDeInit();
 #endif
 #ifdef CONFIG_CMD_ROCKUSB
 		/* rockusb key press, set flag = 1 for rockusb timeout check */
@@ -182,7 +208,7 @@ int board_fbt_key_pressed(void)
 		}
 #endif
 #ifdef CONFIG_CMD_FASTBOOT
-	} else if(boot_fastboot && (vbus!=0)) {
+	} else if (boot_fastboot && (vbus != 0)) {
 		printf("fastboot key pressed.\n");
 		frt = FASTBOOT_REBOOT_FASTBOOT;
 #endif
@@ -206,7 +232,7 @@ int board_fbt_key_pressed(void)
 void board_fbt_finalize_bootargs(char* args, int buf_sz,
 		int ramdisk_addr, int ramdisk_sz, int recovery)
 {
-	char recv_cmd[2]={0};
+	char recv_cmd[2] = {0};
 
 	rkloader_fixInitrd(&gBootInfo, ramdisk_addr, ramdisk_sz);
 	if (recovery) {
@@ -298,20 +324,6 @@ const disk_partition_t* board_fbt_get_partition(const char* name)
 }
 
 
-#ifdef CONFIG_CMD_CHARGE_ANIM
-static void board_fbt_run_charge(void)
-{
-	char *const boot_charge_cmd[] = {"bootrk", "charge"};
-#ifdef CONFIG_CMD_BOOTRK
-	do_bootrk(NULL, 0, ARRAY_SIZE(boot_charge_cmd), boot_charge_cmd);
-#endif
-
-	/* returns if boot.img is bad */
-	FBTERR("\nfastboot: Error: Invalid boot img\n");
-}
-#endif
-
-
 static void board_fbt_run_recovery(void)
 {
 #ifdef CONFIG_CMD_BOOTRK
@@ -330,8 +342,7 @@ void board_fbt_run_recovery_wipe_data(void)
 
 	FBTDBG("Rebooting into recovery to do wipe_data\n");
 
-	if (!board_fbt_get_partition("misc"))
-	{
+	if (!board_fbt_get_partition("misc")) {
 		FBTERR("not found misc partition, just run recovery.\n");
 		board_fbt_run_recovery();
 	}
@@ -361,7 +372,7 @@ static void board_fbt_low_power_check(void)
 	}
 
 	if (is_power_extreme_low()) {
-		//it should be extreme low power without charger connected.
+		/* it should be extreme low power without charger connected. */
 		FBTERR("extreme low power, shutting down...\n");
 		shut_down();
 		printf("not reach here.\n");
@@ -379,11 +390,16 @@ static void board_fbt_low_power_off(void)
 
 			lcd_standby(0);
 			//TODO: set backlight in better way.
-			rk_backlight_ctrl(CONFIG_BRIGHTNESS_DIM);
 
-			udelay(1000000);//1 sec
+#ifdef CONFIG_RK_PWM_BL
+			rk_pwm_bl_config(CONFIG_BRIGHTNESS_DIM);
+#endif
 
-			rk_backlight_ctrl(0);
+			udelay(1000000); /* 1 sec */
+
+#ifdef CONFIG_RK_PWM_BL
+			rk_pwm_bl_config(0);
+#endif
 			lcd_standby(1);
 #endif
 			shut_down();
@@ -405,6 +421,12 @@ static void board_fbt_low_power_off(void)
 void board_fbt_preboot(void)
 {
 	enum fbt_reboot_type frt;
+	__maybe_unused bool charge_enable = false;
+#ifdef CONFIG_UBOOT_CHARGE
+	int charge_node;			/*device node*/
+	int uboot_charge_on = 0;
+	int android_charge_on = 0;
+#endif
 
 #ifdef CONFIG_CMD_FASTBOOT
 	/* need to init this ASAP so we know the unlocked state */
@@ -412,9 +434,16 @@ void board_fbt_preboot(void)
 #endif
 
 	frt = board_fbt_get_reboot_type();
+	/* cold boot */
+	if (frt == FASTBOOT_REBOOT_UNKNOWN)
+		charge_enable = true;
+	/* no spec reboot type, check key press */
 	if ((frt == FASTBOOT_REBOOT_UNKNOWN) || (frt == FASTBOOT_REBOOT_NORMAL)) {
 		FBTDBG("\n%s: no spec reboot type, check key press.\n", __func__);
 		frt = board_fbt_key_pressed();
+		/* detect key press, disable charge */
+		if (frt != FASTBOOT_REBOOT_UNKNOWN)
+			charge_enable = false;
 	} else {
 		//clear reboot type.
 		board_fbt_set_reboot_type(FASTBOOT_REBOOT_NORMAL);
@@ -432,6 +461,7 @@ void board_fbt_preboot(void)
 		int node = fdt_path_offset(gd->fdt_blob, "/fb");
 		g_logo_on_state = fdtdec_get_int(gd->fdt_blob, node, "rockchip,uboot-logo-on", 0);
 	}
+	gd->uboot_logo = g_logo_on_state;
 	printf("read logo on state from dts [%d]\n", g_logo_on_state);
 
 	if (g_logo_on_state != 0) {
@@ -445,8 +475,23 @@ void board_fbt_preboot(void)
 #endif
 
 #ifdef CONFIG_UBOOT_CHARGE
-	//check charge mode when no key pressed.
-	if (((frt == FASTBOOT_REBOOT_UNKNOWN) && board_fbt_is_charging()) \
+	charge_node = fdt_node_offset_by_compatible(gd->fdt_blob,
+						0, "rockchip,uboot-charge");
+	if (charge_node < 0) {
+		debug("can't find dts node for uboot-charge\n");
+		uboot_charge_on = 1;
+		android_charge_on = 0;
+	} else {
+		uboot_charge_on = fdtdec_get_int(gd->fdt_blob, charge_node, "rockchip,uboot-charge-on", 0);
+		android_charge_on = fdtdec_get_int(gd->fdt_blob, charge_node, "rockchip,android-charge-on", 0);
+	}
+
+
+	/* enter charge mode:
+	 * 1. reboot charge mode
+	 * 2. cold boot and detect charger insert
+	 */
+	if ((uboot_charge_on == 1 && charge_enable && board_fbt_is_charging()) \
 		|| (frt == FASTBOOT_REBOOT_CHARGE)) {
 #ifdef CONFIG_CMD_CHARGE_ANIM
 		char *charge[] = { "charge" };
@@ -455,10 +500,12 @@ void board_fbt_preboot(void)
 			frt = FASTBOOT_REBOOT_NORMAL;
 			lcd_clear();
 		}
-#else
-		return fbt_run_charge();
 #endif
 	}
+	if ((android_charge_on == 1 && charge_enable && board_fbt_is_charging()) \
+		|| (frt == FASTBOOT_REBOOT_CHARGE)) {
+			android_charge_mode = 1;
+		}
 #endif //CONFIG_UBOOT_CHARGE
 
 #ifdef CONFIG_RK_KEY
@@ -467,10 +514,11 @@ void board_fbt_preboot(void)
 
 #ifdef CONFIG_LCD
 	if (g_logo_on_state != 0) {
-		//lcd_enable_logo(true);
 		lcd_standby(0);
-		//mdelay(100);
-		rk_backlight_ctrl(-1); /*use defaut brightness in dts*/
+#ifdef CONFIG_RK_PWM_BL
+		/* use defaut brightness in dts */
+		rk_pwm_bl_config(-1);
+#endif
 	}
 #endif
 
@@ -499,10 +547,10 @@ void board_fbt_preboot(void)
 	}
 #endif
 	else if (frt == FASTBOOT_REBOOT_RAMFS) {
-		#ifdef CONFIG_CMD_BOOTRK
+#ifdef CONFIG_CMD_BOOTRK
 		char *const boot_cmd[] = {"bootrk", "ramfs"};
 		do_bootrk(NULL, 0, ARRAY_SIZE(boot_cmd), boot_cmd);
-		#endif
+#endif
 	}
 	else {
 		FBTDBG("\n%s: check misc command.\n", __func__);

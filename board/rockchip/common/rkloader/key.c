@@ -28,9 +28,6 @@ __maybe_unused static key_config	key_recovery;
 __maybe_unused static key_config	key_fastboot;
 __maybe_unused static key_config	key_power;
 
-#ifdef CONFIG_RK_PWM_REMOTE
-__maybe_unused static key_config	key_remote;
-#endif
 
 #ifdef CONFIG_OF_LIBFDT
 __maybe_unused static struct fdt_gpio_state	gPowerKey;
@@ -48,31 +45,29 @@ static int GetPortState(key_config *key)
 	adc_conf* adc = &key->key.adc;
 	int_conf* ioint = &key->key.ioint;
 
-	if(key->type == KEY_AD)
-	{
-		// TODO: clk没有配置
-		for(tt = 0; tt < 10; tt++)
-		{
-			// read special gpio port value.
+	if (key->type == KEY_AD) {
+		/* TODO: clk没有配置 */
+		for (tt = 0; tt < 10; tt++) {
+			/* read special gpio port value. */
 			uint32 value;
 			uint32 timeout = 0;
 
-			write_XDATA32( adc->ctrl, 0);
-			DRVDelayUs(1);
-			write_XDATA32( adc->ctrl, 0x0028|(adc->index));
-			DRVDelayUs(1);
+			write_XDATA32(adc->ctrl, 0);
+			DRVDelayUs(5);
+			write_XDATA32(adc->ctrl, 0x0028 | (adc->index));
+			DRVDelayUs(5);
 			do {
 				value = read_XDATA32(adc->ctrl);
 				timeout++;
-			} while((value&0x40) == 0);
+			} while((value & 0x40) == 0);
 			value = read_XDATA32(adc->data);
 			//printf("adc key = %d\n",value);
 			//DRVDelayUs(1000);
-			if( value<=adc->keyValueHigh && value>=adc->keyValueLow)
+			if ((value <= adc->keyValueHigh) && (value >= adc->keyValueLow))
 				hCnt++;
 		}
-		write_XDATA32( adc->ctrl, 0);
-		return (hCnt>8);
+		write_XDATA32(adc->ctrl, 0);
+		return (hCnt > 8);
 	} else if (key->type == KEY_INT) {
 		int state;
 
@@ -130,10 +125,10 @@ __maybe_unused static void RockusbKeyInit(void)
 	key_rockusb.type = KEY_AD;
 	key_rockusb.key.adc.index = KEY_ADC_CN;
 	key_rockusb.key.adc.keyValueLow = 0;
-	key_rockusb.key.adc.keyValueHigh= 30;
-	key_rockusb.key.adc.data = SARADC_BASE;
-	key_rockusb.key.adc.stas = SARADC_BASE+4;
-	key_rockusb.key.adc.ctrl = SARADC_BASE+8;
+	key_rockusb.key.adc.keyValueHigh = 30;
+	key_rockusb.key.adc.data = SARADC_BASE + 0;
+	key_rockusb.key.adc.stas = SARADC_BASE + 4;
+	key_rockusb.key.adc.ctrl = SARADC_BASE + 8;
 #endif
 }
 
@@ -143,10 +138,10 @@ __maybe_unused static void RecoveryKeyInit(void)
 	key_recovery.type = KEY_AD;
 	key_recovery.key.adc.index = KEY_ADC_CN;
 	key_recovery.key.adc.keyValueLow = 0;
-	key_recovery.key.adc.keyValueHigh= 30;
-	key_recovery.key.adc.data = SARADC_BASE;
-	key_recovery.key.adc.stas = SARADC_BASE+4;
-	key_recovery.key.adc.ctrl = SARADC_BASE+8;
+	key_recovery.key.adc.keyValueHigh = 30;
+	key_recovery.key.adc.data = SARADC_BASE + 0;
+	key_recovery.key.adc.stas = SARADC_BASE + 4;
+	key_recovery.key.adc.ctrl = SARADC_BASE + 8;
 }
 
 
@@ -154,11 +149,11 @@ __maybe_unused static void FastbootKeyInit(void)
 {
 	key_fastboot.type = KEY_AD;
 	key_fastboot.key.adc.index = KEY_ADC_CN;
-	key_fastboot.key.adc.keyValueLow = 170;
-	key_fastboot.key.adc.keyValueHigh= 180;
-	key_fastboot.key.adc.data = SARADC_BASE;
-	key_fastboot.key.adc.stas = SARADC_BASE+4;
-	key_fastboot.key.adc.ctrl = SARADC_BASE+8;
+	key_fastboot.key.adc.keyValueLow = 160;
+	key_fastboot.key.adc.keyValueHigh = 180;
+	key_fastboot.key.adc.data = SARADC_BASE + 0;
+	key_fastboot.key.adc.stas = SARADC_BASE + 4;
+	key_fastboot.key.adc.ctrl = SARADC_BASE + 8;
 }
 
 
@@ -200,9 +195,6 @@ __maybe_unused static void ChargeStateGpioInit(void)
 
 #ifdef CONFIG_RK_PWM_REMOTE
 
-#define IRQ_PWM_REMOTE		RKIRQ_PWM_REMOTE
-
-
 extern int g_ir_keycode;
 extern int remotectl_do_something(void);
 extern void remotectlInitInDriver(void);
@@ -210,18 +202,10 @@ extern void remotectlInitInDriver(void);
 
 int RemotectlInit(void)
 {
-	key_remote.type = KEY_REMOTE;
-	key_remote.key.ioint.name = NULL;
-	key_remote.key.ioint.gpio = (GPIO_BANK0 | GPIO_D3);
-	key_remote.key.ioint.flags = IRQ_TYPE_EDGE_FALLING;
-	key_remote.key.ioint.pressed_state = 0;
-	key_remote.key.ioint.press_time = 0;
-
 	remotectlInitInDriver();
-	rk_iomux_config(RK_PWM3_IOMUX);
 	//install the irq hander for PWM irq.
-	irq_install_handler(IRQ_PWM_REMOTE, (interrupt_handler_t *)remotectl_do_something, NULL);
-	irq_handler_enable(IRQ_PWM_REMOTE);
+	irq_install_handler(RK_PWM_REMOTE_IRQ, (interrupt_handler_t *)remotectl_do_something, NULL);
+	irq_handler_enable(RK_PWM_REMOTE_IRQ);
 
 	return 0;
 }
@@ -229,8 +213,8 @@ int RemotectlInit(void)
 int RemotectlDeInit(void)
 {
 	//uninstall and disable PWM irq.
-	irq_uninstall_handler(IRQ_PWM_REMOTE);
-	irq_handler_disable(IRQ_PWM_REMOTE);
+	irq_uninstall_handler(RK_PWM_REMOTE_IRQ);
+	irq_handler_disable(RK_PWM_REMOTE_IRQ);
 
 	return 0;
 }
@@ -254,7 +238,16 @@ static int rkkey_parse_powerkey_dt(const void *blob, struct fdt_gpio_state *powe
 {
 	int powerkey_node;
 
+#if 0
 	powerkey_node = fdt_path_offset(blob, "/adc/key/power-key");
+#else
+	powerkey_node = fdt_node_offset_by_compatible(blob, -1, "rockchip,key");
+	if (powerkey_node < 0) {
+		printf("no key node\n");
+		return -1;
+	}
+	powerkey_node = fdt_subnode_offset(blob, powerkey_node, "power-key");
+#endif
 	if (powerkey_node < 0) {
 		printf("no power key node\n");
 		return -1;

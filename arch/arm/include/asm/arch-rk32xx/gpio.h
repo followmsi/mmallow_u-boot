@@ -46,7 +46,7 @@ struct rk_gpio_bank {
  * rk gpio api define the gpio format as:
  * using 32 bit for rk gpio value,
  * the high 24bit of gpio is bank id, the low 8bit of gpio is pin number
- * eg: gpio = 0x00010008, it mean gpio1_b0, 0x00010000 is bank id of GPIO_BANK1, 0x00000008 is GPIO_B0
+ * eg: gpio = 0x00000108, it mean gpio1_b0, 0x00000100 is bank id of GPIO_BANK1, 0x00000008 is GPIO_B0
  */
 
 /* bank and pin bit mask */
@@ -195,8 +195,10 @@ struct rk_gpio_bank *rk_gpio_get_bank(unsigned gpio);
 struct rk_gpio_bank *rk_gpio_id_to_bank(unsigned int id);
 int rk_gpio_base_to_bank(unsigned base);
 
+#ifdef CONFIG_RK_GPIO_EXT_FUNC
 int gpio_pull_updown(unsigned gpio, enum GPIOPullType type);
 int gpio_drive_slector(unsigned gpio, enum GPIODriveSlector slector);
+#endif /* CONFIG_RK_GPIO_EXT_FUNC */
 int gpio_set_value(unsigned gpio, int value);
 int gpio_get_value(unsigned gpio);
 int gpio_direction_output(unsigned gpio, int value);
